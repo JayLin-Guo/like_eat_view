@@ -181,12 +181,13 @@ const App: React.FC = () => {
     });
   };
 
-  const handleEnterCategory = async (cat: Category) => {
+  const handleEnterCategory = async (cat: Category, isRetry = false) => {
     setSelectedCat(cat);
+    setFoods([]); // Clear old foods
     setStep(7);
     setIsAILoading(true);
     
-    const context = `用户 ${profile.gender}，画像：${profile.region}，场景：${profile.mealTime}。细节：${Object.values(profile.history).join(', ')}。用户已点击进入最顶级大类：【${cat.name}】。给出具体的商家爆款菜单。`;
+    const context = `用户 ${profile.gender}，画像：${profile.region}，场景：${profile.mealTime}。细节：${Object.values(profile.history).join(', ')}。用户进入大类：【${cat.name}】。${isRetry ? '（注意：用户对刚才的推荐不满意，请务必推荐完全不同的一批新爆款单品！）' : '给出具体的商家爆款菜单。'}`;
     const promptTemplate = systemPrompts.generateFoods.replace(/\${mealTime}/g, profile.mealTime || '日常');
     
     try {
@@ -198,10 +199,14 @@ const App: React.FC = () => {
         ],
         response_format: { type: 'json_object' }
       });
-      const parsed = JSON.parse(resp.data.choices[0].message.content);
+      let content = resp.data.choices[0].message.content;
+      // Strip potential markdown wrappers just in case
+      content = content.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(content);
       setFoods(parsed.foods || []);
     } catch (err) {
       console.error('Food generation error', err);
+      // Fallback in case of parse error
     } finally {
       setIsAILoading(false);
     }
@@ -466,7 +471,7 @@ const App: React.FC = () => {
             </div>
 
             <div className="result-actions">
-               <button className="retry-btn" onClick={() => handleEnterCategory(selectedCat)}>
+               <button className="retry-btn" onClick={() => handleEnterCategory(selectedCat, true)}>
                   <RefreshCw size={18} /> 菜单不满意？换一批单品
                </button>
                <button className="reset-btn" onClick={() => setStep(6)}>返回上一级 (切换其他品类)</button>
