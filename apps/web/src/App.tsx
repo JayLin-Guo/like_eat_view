@@ -43,7 +43,8 @@ const REGIONS = [
   { id: 'south', name: '江南婉约派', desc: '米饭为主、清淡精致、偏爱鲜甜', icon: '🍚' },
   { id: 'spicy', name: '川渝湘辣鬼', desc: '无辣不欢、重油重口、江湖风汇', icon: '🌶️' },
   { id: 'northwest', name: '西北狂野侠', desc: '大口吃肉、生猛碳水、孜然烤肉', icon: '🍖' },
-  { id: 'canton', name: '两广福建仔', desc: '早茶点心、原汁原味、靓汤海鲜', icon: '🥟' }
+  { id: 'canton', name: '两广福建仔', desc: '早茶点心、原汁原味、靓汤海鲜', icon: '🥟' },
+  { id: 'fast', name: '快餐依赖控', desc: '汉堡披萨、炸鸡快乐、省时果腹', icon: '🍔' }
 ];
 
 const App: React.FC = () => {
@@ -108,7 +109,7 @@ const App: React.FC = () => {
     setStep(3);
     setIsAILoading(true);
     
-    const context = `用户画像：性别 ${profile.gender}，地域背景：${profile.region}，其他偏向：${Object.values(history).join(', ')}。请严格基于【中国本土饮食文化】及该用户的【地域特征】推断出对应的 6 个美食大类。注意：地域特征为主，但偶尔推一点跨地域的新鲜感也是可以的。`;
+    const context = `用户画像：性别 ${profile.gender}，地域/基础口味：${profile.region}，当前的身体情绪感知：${Object.values(history).join(', ')}。请推断出对应的 8 个多元美食大类。注意：一定不要只局限于传统中餐，一定要根据画像合理分配汉堡、快餐、轻食、异国料理的比重。`;
 
     const promptTemplate = systemPrompts.generateCategories.replace(/\${region}/g, profile.region || '全国');
 
@@ -137,9 +138,10 @@ const App: React.FC = () => {
     
     const randomIndex = Math.floor(Math.random() * categories.length);
     const degreePerSection = 360 / categories.length;
-    const targetRotation = 360 * 10 + (randomIndex * degreePerSection) + (degreePerSection / 2);
+    // adding multiple 360 offsets to spin 8-10 times
+    const targetRotation = 360 * 10 - (randomIndex * degreePerSection) - (degreePerSection / 2);
     
-    setRotation(prev => prev + targetRotation);
+    setRotation(prev => prev + targetRotation + 3600); // 3600 just makes sure it keeps spinning far ahead
 
     setTimeout(async () => {
       setIsSpinning(false);
@@ -158,7 +160,7 @@ const App: React.FC = () => {
 
   const generateFoods = async (cat: Category) => {
     setIsAILoading(true);
-    const context = `用户画像：性别 ${profile.gender}，地域：${profile.region}，偏好：${Object.values(profile.history).join(', ')}。选定中国美食分类：【${cat.name}】。`;
+    const context = `用户画像：性别 ${profile.gender}，画像：${profile.region}，偏好：${Object.values(profile.history).join(', ')}。选定美食雷达分类：【${cat.name}】。`;
     const promptTemplate = systemPrompts.generateFoods.replace(/\${region}/g, profile.region || '全国');
     
     try {
@@ -202,17 +204,17 @@ const App: React.FC = () => {
               <motion.div initial={{ rotate: -10 }} animate={{ rotate: 10 }} transition={{ repeat: Infinity, duration: 3, repeatType: 'reverse' }}>
                 <Utensils size={60} color="#f24e1e" />
               </motion.div>
-              <h1>寻味中国 · 灵感决定</h1>
-              <p>基于中国美食文化的 AI 决策引擎。每一碗烟火气，都值得被精准推荐。</p>
+              <h1>灵感风暴 · 吃点什么</h1>
+              <p>打破选择僵局，精准狙击您的胃口痛点。从火锅到汉堡，从日料到沙拉，万物皆可盘。</p>
             </div>
             <div className="gender-row">
               <button className="gender-card male" onClick={() => handleGenderSelect('male')}>
-                <span className="emoji">🥢</span>
+                <span className="emoji">🍔</span>
                 <h3>大胃少年</h3>
               </button>
               <button className="gender-card female" onClick={() => handleGenderSelect('female')}>
-                <span className="emoji">🥟</span>
-                <h3>饕餮少女</h3>
+                <span className="emoji">🍣</span>
+                <h3>挑剔少女</h3>
               </button>
             </div>
           </motion.div>
@@ -222,11 +224,11 @@ const App: React.FC = () => {
         {step === 1 && (
           <motion.div key="step1" className="step-container" initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }}>
              <button className="back-btn" onClick={() => setStep(0)}>
-               <ChevronLeft size={20} /> 返回重选性别
+               <ChevronLeft size={20} /> 返回重置
              </button>
              <div className="header-simple" style={{ marginTop: '2rem' }}>
                <MapPin size={50} color="#ffcc00" style={{ margin: '0 auto 1rem' }} />
-               <h2>南北之争，由你定义</h2>
+               <h2>口味定调，由你定义</h2>
                <p>饮食特征差异极大，请选择您最亲切的地域胃口定位，或者当前最想体验的风味：</p>
              </div>
              
@@ -254,7 +256,7 @@ const App: React.FC = () => {
                     <div className="circle two"></div>
                     <div className="circle three"></div>
                  </div>
-                <p>正在分析您的 <b>{profile.region}</b> 胃口特征，生成专属美食问卷...</p>
+                <p>正在分析您的 <b>{profile.region}</b> 胃口特征，生成专属诊断问卷...</p>
               </div>
             ) : currentQuestion && (
               <div className="question-card">
@@ -285,9 +287,9 @@ const App: React.FC = () => {
                   <div className="circle two"></div>
                   <div className="circle three"></div>
                </div>
-               <h2>AI 正在揉合您的画像...</h2>
-               <p>性别: {profile.gender === 'male' ? '男生' : '女生'} | 地域: {profile.region}</p>
-               <p style={{ color: '#888', marginTop: '1rem', fontStyle: 'italic' }}>“汇聚八大菜系与街头巷尾的灵感...”</p>
+               <h2>AI 正在推算专属的美食雷达...</h2>
+               <p>性别: {profile.gender === 'male' ? '男生' : '女生'} | 画像: {profile.region}</p>
+               <p style={{ color: '#888', marginTop: '1rem', fontStyle: 'italic' }}>“汇聚地方爆款与西式快餐汉堡...”</p>
             </div>
           </motion.div>
         )}
@@ -296,8 +298,8 @@ const App: React.FC = () => {
         {step === 4 && (
           <motion.div key="step4" className="step-container roulette-step" initial={{ scale: 0.8 }} animate={{ scale: 1 }}>
              <div className="header-simple">
-               <h2>灵感转盘已就绪</h2>
-               <p>AI 已根据您的深层需求推断出最好的一餐</p>
+               <h2>命运轮盘已生成 (8 大选项)</h2>
+               <p>绝不单调，囊括中西快餐与街头爆款</p>
              </div>
              <div className="wheel-wrapper">
                 <div className="wheel-pointer"></div>
@@ -309,7 +311,7 @@ const App: React.FC = () => {
                   ))}
                 </div>
                 <button className="wheel-center-btn" onClick={startSpin} disabled={isSpinning}>
-                  {isSpinning ? 'SPIN' : '指 引'}
+                  {isSpinning ? 'SPIN' : 'GO!'}
                 </button>
              </div>
           </motion.div>
@@ -332,7 +334,7 @@ const App: React.FC = () => {
               {isAILoading ? (
                 <div className="loading-state-mini">
                   <Loader2 className="animate-spin" size={30} />
-                  <span>正在为您筛选 <b>{profile.region}</b> 最地道的必吃选择...</span>
+                  <span>正在为您筛选最佳的具体外卖/餐厅建议...</span>
                 </div>
               ) : (
                 foods.map((food, idx) => (
@@ -354,9 +356,9 @@ const App: React.FC = () => {
 
             <div className="result-actions">
                <button className="retry-btn" onClick={() => setStep(4)}>
-                  <RefreshCw size={18} /> 命中不符？重拨灵感
+                  <RefreshCw size={18} /> 命中不符？重拨轮盘
                </button>
-               <button className="reset-btn" onClick={reset}>归零，重新定义画像</button>
+               <button className="reset-btn" onClick={reset}>归零重构，更换主基调</button>
             </div>
           </motion.div>
         )}
