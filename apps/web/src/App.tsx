@@ -20,6 +20,7 @@ interface Question {
 
 interface UserProfile {
   gender: 'male' | 'female' | null;
+  occupation: string | null;
   region: string | null;
   mealTime: string | null;
   history: Record<string, string>; // questionId -> optionLabel
@@ -56,14 +57,26 @@ const MEAL_TIMES = [
   { id: 'night', name: '深夜食堂', desc: '烧烤夜宵、罪恶快感', icon: '🍢' }
 ];
 
+const OCCUPATIONS = [
+  { id: 'worker', name: '职场白领', desc: '追求效率、性价比与工作解压', icon: '🏢' },
+  { id: 'fitness', name: '健身自律党', desc: '死磕蛋白质，拒绝无脑高油脂', icon: '🏋️' },
+  { id: 'student', name: '学生党/特种兵', desc: '预算有限但想要极致碳水快乐', icon: '🎓' },
+  { id: 'enjoyer', name: '精致享受派', desc: '吃的是情调、出片和绝赞风味', icon: '👑' }
+];
+
 const SLOT_HEIGHT = 80;
+
+const getDayType = () => {
+  const isWeekend = [0, 6].includes(new Date().getDay());
+  return isWeekend ? '周末休假（偏向于犒劳自己、放松吃顿好的）' : '普通工作日（更偏重于场景适配与实际生理需求）';
+};
 
 const App: React.FC = () => {
   const [step, setStep] = useState(0); 
-  // 0:Gender, 1:Region, 2:Meal, 3:AI Survey, 4:Loading Cats, 5:Slot, 6:Categories Grid, 7:Final Menu
+  // 0:Gender, 0.5:Occupation, 1:Region, 2:Meal, 3:AI Survey, 4:Loading Cats, 5:Slot, 6:Categories Grid, 7:Final Menu
   const [profile, setProfile] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('userProfile');
-    return saved ? JSON.parse(saved) : { gender: null, region: null, mealTime: null, history: {} };
+    return saved ? JSON.parse(saved) : { gender: null, occupation: null, region: null, mealTime: null, history: {} };
   });
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
@@ -81,8 +94,13 @@ const App: React.FC = () => {
 
   // --- Core Handlers ---
   const handleGenderSelect = (gender: 'male' | 'female') => {
-    setProfile({ gender, region: null, mealTime: null, history: {} });
-    setStep(1); 
+    setProfile({ gender, occupation: null, region: null, mealTime: null, history: {} });
+    setStep(0.5); 
+  };
+
+  const handleOccupationSelect = (occupationName: string) => {
+    setProfile(prev => ({ ...prev, occupation: occupationName }));
+    setStep(1);
   };
 
   const handleRegionSelect = (regionName: string) => {
@@ -98,6 +116,8 @@ const App: React.FC = () => {
     let promptTemplate = systemPrompts.generateSurvey
       .replace(/\${role}/g, getSystemRole(mealTimeName))
       .replace(/\${region}/g, profile.region || '全国')
+      .replace(/\${occupation}/g, profile.occupation || '普通人')
+      .replace(/\${dayType}/g, getDayType())
       .replace(/\${mealTime}/g, mealTimeName);
 
     try {
@@ -130,11 +150,13 @@ const App: React.FC = () => {
     setStep(4);
     setIsAILoading(true);
     
-    const context = `用户画像：性别 ${profile.gender}，地域/口味：${profile.region}。就餐场景：${profile.mealTime}。目前的情绪或偏向：${Object.values(history).join(', ')}。务必推断出 12 个强关联 ${profile.mealTime} 场景的顶级美食大类（即外卖最顶级的归类）。`;
+    const context = `用户画像：性别 ${profile.gender}，职业属性：${profile.occupation}，地域/口味：${profile.region}。日历特征：${getDayType()}。就餐场景：${profile.mealTime}。目前的情绪或偏向：${Object.values(history).join(', ')}。务必推断出 12 个极具诱惑力的大类。`;
 
     const promptTemplate = systemPrompts.generateCategories
       .replace(/\${role}/g, getSystemRole(profile.mealTime || '日常'))
       .replace(/\${region}/g, profile.region || '全国')
+      .replace(/\${occupation}/g, profile.occupation || '普通人')
+      .replace(/\${dayType}/g, getDayType())
       .replace(/\${mealTime}/g, profile.mealTime || '日常');
 
     try {
@@ -191,9 +213,11 @@ const App: React.FC = () => {
     setStep(7);
     setIsAILoading(true);
     
-    const context = `用户 ${profile.gender}，画像：${profile.region}，场景：${profile.mealTime}。细节：${Object.values(profile.history).join(', ')}。用户进入大类：【${cat.name}】。${isRetry ? '（注意：用户对刚才的推荐不满意，请务必推荐完全不同的一批新爆款单品！）' : '给出具体的商家爆款菜单。'}`;
+    const context = `用户 ${profile.gender}，身份：${profile.occupation}，假期状态：${getDayType()}，地区：${profile.region}，场景：${profile.mealTime}。细节：${Object.values(profile.history).join(', ')}。用户进入大类：【${cat.name}】。${isRetry ? '（注意：用户对刚才的推荐不满意，请务必推荐完全不同的一批新爆款单品！）' : '给出具体的商家爆款菜单。'}`;
     const promptTemplate = systemPrompts.generateFoods
       .replace(/\${role}/g, getSystemRole(profile.mealTime || '日常'))
+      .replace(/\${occupation}/g, profile.occupation || '普通人')
+      .replace(/\${dayType}/g, getDayType())
       .replace(/\${mealTime}/g, profile.mealTime || '日常');
     
     try {
@@ -225,7 +249,7 @@ const App: React.FC = () => {
     setSelectedCat(null);
     setFoods([]);
     controls.set({ y: 0 });
-    setProfile({ gender: null, region: null, mealTime: null, history: {} });
+    setProfile({ gender: null, occupation: null, region: null, mealTime: null, history: {} });
   };
 
   const slotReelItems = categories.length > 0 ? Array(7).fill(categories).flat() : [];
@@ -256,11 +280,37 @@ const App: React.FC = () => {
           </motion.div>
         )}
 
+        {/* STEP 0.5: OCCUPATION SELECTION */}
+        {step === 0.5 && (
+          <motion.div key="step05" className="step-container" initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }}>
+             <button className="back-btn" onClick={() => setStep(0)}>
+               <ChevronLeft size={20} /> 返回性别选择
+             </button>
+             <div className="header-simple" style={{ marginTop: '2rem' }}>
+               <User size={50} color="#ffcc00" style={{ margin: '0 auto 1rem' }} />
+               <h2>生活状态，决定供给</h2>
+               <p>白领的午餐和健身教练的代餐是两个宇宙。您最近是哪种状态？</p>
+             </div>
+             
+             <div className="region-grid">
+               {OCCUPATIONS.map(occ => (
+                 <button key={occ.id} className="region-card" onClick={() => handleOccupationSelect(occ.name)}>
+                    <span className="emoji-reg">{occ.icon}</span>
+                    <div className="reg-info">
+                      <h3>{occ.name}</h3>
+                      <p>{occ.desc}</p>
+                    </div>
+                 </button>
+               ))}
+             </div>
+          </motion.div>
+        )}
+
         {/* STEP 1: REGION SELECTION */}
         {step === 1 && ( /* same as before */
           <motion.div key="step1" className="step-container" initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }}>
-             <button className="back-btn" onClick={() => setStep(0)}>
-               <ChevronLeft size={20} /> 返回重置
+             <button className="back-btn" onClick={() => setStep(0.5)}>
+               <ChevronLeft size={20} /> 返回前一步
              </button>
              <div className="header-simple" style={{ marginTop: '2rem' }}>
                <MapPin size={50} color="#ffcc00" style={{ margin: '0 auto 1rem' }} />
