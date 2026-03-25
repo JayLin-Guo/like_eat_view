@@ -162,7 +162,9 @@ const App: React.FC = () => {
     
     const randomIndex = Math.floor(Math.random() * categories.length);
     const targetSetIndex = 5; 
-    const finalOffset = -(targetSetIndex * categories.length + randomIndex) * SLOT_HEIGHT;
+    // We want the item to be in the middle of the 3-item window (which is 80px down from the top).
+    // So we subtract 1 from the total index to leave it positioned in the center highlighted row.
+    const finalOffset = -(targetSetIndex * categories.length + randomIndex - 1) * SLOT_HEIGHT;
 
     await controls.start({
       y: finalOffset,
