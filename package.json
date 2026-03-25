@@ -1,0 +1,14 @@
+{
+  "name": "like-eat-view",
+  "version": "1.0.0",
+  "description": "What to Eat monorepo",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -r --filter web dev",
+    "build": "pnpm -r --filter web build",
+    "lint": "pnpm -r --filter web lint"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
