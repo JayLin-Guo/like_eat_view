@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 import { Utensils, RefreshCw, ChevronLeft, Award, User, Sparkles, Send, Loader2, Star, CheckCircle2, ChevronRight, Zap, MapPin, Clock, ArrowRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { deepseek, systemPrompts } from './utils/ai';
+import { deepseek, systemPrompts, getSystemRole } from './utils/ai';
 import './App.css';
 
 // --- Types ---
@@ -96,6 +96,7 @@ const App: React.FC = () => {
     setIsAILoading(true);
 
     let promptTemplate = systemPrompts.generateSurvey
+      .replace(/\${role}/g, getSystemRole(mealTimeName))
       .replace(/\${region}/g, profile.region || '全国')
       .replace(/\${mealTime}/g, mealTimeName);
 
@@ -132,6 +133,7 @@ const App: React.FC = () => {
     const context = `用户画像：性别 ${profile.gender}，地域/口味：${profile.region}。就餐场景：${profile.mealTime}。目前的情绪或偏向：${Object.values(history).join(', ')}。务必推断出 12 个强关联 ${profile.mealTime} 场景的顶级美食大类（即外卖最顶级的归类）。`;
 
     const promptTemplate = systemPrompts.generateCategories
+      .replace(/\${role}/g, getSystemRole(profile.mealTime || '日常'))
       .replace(/\${region}/g, profile.region || '全国')
       .replace(/\${mealTime}/g, profile.mealTime || '日常');
 
@@ -190,7 +192,9 @@ const App: React.FC = () => {
     setIsAILoading(true);
     
     const context = `用户 ${profile.gender}，画像：${profile.region}，场景：${profile.mealTime}。细节：${Object.values(profile.history).join(', ')}。用户进入大类：【${cat.name}】。${isRetry ? '（注意：用户对刚才的推荐不满意，请务必推荐完全不同的一批新爆款单品！）' : '给出具体的商家爆款菜单。'}`;
-    const promptTemplate = systemPrompts.generateFoods.replace(/\${mealTime}/g, profile.mealTime || '日常');
+    const promptTemplate = systemPrompts.generateFoods
+      .replace(/\${role}/g, getSystemRole(profile.mealTime || '日常'))
+      .replace(/\${mealTime}/g, profile.mealTime || '日常');
     
     try {
       const resp = await deepseek.post('/chat/completions', {
