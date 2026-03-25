@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 import { Utensils, RefreshCw, ChevronLeft, Award, User, Sparkles, Send, Loader2, Star, CheckCircle2, ChevronRight, Zap, MapPin } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { deepseek, systemPrompts } from './utils/ai';
@@ -47,8 +47,10 @@ const REGIONS = [
   { id: 'fast', name: '快餐依赖控', desc: '汉堡披萨、炸鸡快乐、省时果腹', icon: '🍔' }
 ];
 
+const SLOT_HEIGHT = 80; // Height of an individual slot item in px
+
 const App: React.FC = () => {
-  const [step, setStep] = useState(0); // 0: Gender, 1: Region, 2: AI Survey, 3: Thinking/Wheel Gen, 4: Roulette, 5: Result
+  const [step, setStep] = useState(0); // 0: Gender, 1: Region, 2: AI Survey, 3: Thinking/Gen, 4: Slot Machine, 5: Result
   const [profile, setProfile] = useState<UserProfile>(() => {
     const saved = localStorage.getItem('userProfile');
     return saved ? JSON.parse(saved) : { gender: null, region: null, history: {} };
@@ -59,8 +61,9 @@ const App: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCat, setSelectedCat] = useState<Category | null>(null);
   const [foods, setFoods] = useState<Food[]>([]);
-  const [rotation, setRotation] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
+  
+  const controls = useAnimation(); // Framer motion controls for the slot machine reel
 
   useEffect(() => {
     localStorage.setItem('userProfile', JSON.stringify(profile));
@@ -109,7 +112,8 @@ const App: React.FC = () => {
     setStep(3);
     setIsAILoading(true);
     
-    const context = `用户画像：性别 ${profile.gender}，地域/基础口味：${profile.region}，当前的身体情绪感知：${Object.values(history).join(', ')}。请推断出对应的 8 个多元美食大类。注意：一定不要只局限于传统中餐，一定要根据画像合理分配汉堡、快餐、轻食、异国料理的比重。`;
+    // Explicitly ask for 12 categories
+    const context = `用户画像：性别 ${profile.gender}，地域/口味：${profile.region}，当前的身体情绪感知：${Object.values(history).join(', ')}。请给出最匹配的 12 个多元美食大类选项。一定要包含快餐汉堡等非常规餐饮选择。`;
 
     const promptTemplate = systemPrompts.generateCategories.replace(/\${region}/g, profile.region || '全国');
 
@@ -124,6 +128,9 @@ const App: React.FC = () => {
       });
       const parsed = JSON.parse(resp.data.choices[0].message.content);
       setCategories(parsed.categories || []);
+      
+      // Reset the slot animation
+      controls.set({ y: 0 });
       setStep(4);
     } catch (err) {
       console.error('Category generation error', err);
@@ -132,35 +139,39 @@ const App: React.FC = () => {
     }
   };
 
-  const startSpin = () => {
+  const startSpin = async () => {
     if (isSpinning || categories.length === 0) return;
     setIsSpinning(true);
     
     const randomIndex = Math.floor(Math.random() * categories.length);
-    const degreePerSection = 360 / categories.length;
-    // adding multiple 360 offsets to spin 8-10 times
-    const targetRotation = 360 * 10 - (randomIndex * degreePerSection) - (degreePerSection / 2);
-    
-    setRotation(prev => prev + targetRotation + 3600); // 3600 just makes sure it keeps spinning far ahead
+    // Move to the 5th set of categories (so it scrolls a lot before stopping)
+    const targetSetIndex = 5; 
+    const finalOffset = -(targetSetIndex * categories.length + randomIndex) * SLOT_HEIGHT;
 
-    setTimeout(async () => {
-      setIsSpinning(false);
-      const chosen = categories[randomIndex];
-      setSelectedCat(chosen);
-      await generateFoods(chosen);
-      setStep(5);
-      confetti({
-        particleCount: 150,
-        spread: 90,
-        origin: { y: 0.6 },
-        colors: ['#f24e1e', '#ffcc00', '#ffffff']
-      });
-    }, 4000);
+    await controls.start({
+      y: finalOffset,
+      transition: {
+        duration: 4,
+        ease: [0.15, 1, 0.3, 1] // Custom ease-out to simulate mechanical halting
+      }
+    });
+
+    setIsSpinning(false);
+    const chosen = categories[randomIndex];
+    setSelectedCat(chosen);
+    await generateFoods(chosen);
+    setStep(5);
+    confetti({
+      particleCount: 150,
+      spread: 90,
+      origin: { y: 0.6 },
+      colors: ['#f24e1e', '#ffcc00', '#ffffff']
+    });
   };
 
   const generateFoods = async (cat: Category) => {
     setIsAILoading(true);
-    const context = `用户画像：性别 ${profile.gender}，画像：${profile.region}，偏好：${Object.values(profile.history).join(', ')}。选定美食雷达分类：【${cat.name}】。`;
+    const context = `用户画像：性别 ${profile.gender}，画像：${profile.region}，偏好：${Object.values(profile.history).join(', ')}。核心菜单：【${cat.name}】。`;
     const promptTemplate = systemPrompts.generateFoods.replace(/\${region}/g, profile.region || '全国');
     
     try {
@@ -187,25 +198,25 @@ const App: React.FC = () => {
     setCategories([]);
     setSelectedCat(null);
     setFoods([]);
-    setRotation(0);
+    controls.set({ y: 0 });
     setProfile({ gender: null, region: null, history: {} });
   };
 
-  // --- Components ---
-  const currentQuestion = questions[currentQuestionIdx];
+  // Build the repeated list for the slot machine (e.g. 7 repeated sets of categories)
+  const slotReelItems = categories.length > 0 ? Array(7).fill(categories).flat() : [];
 
   return (
     <div className="container">
       <AnimatePresence mode="wait">
-        {/* STEP 0: GENDER SELECTION */}
-        {step === 0 && (
+        {step === 0 && ( /* same as before */
           <motion.div key="step0" className="step-container" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, y: -20 }}>
+            {/* ... */}
             <div className="header-simple">
               <motion.div initial={{ rotate: -10 }} animate={{ rotate: 10 }} transition={{ repeat: Infinity, duration: 3, repeatType: 'reverse' }}>
                 <Utensils size={60} color="#f24e1e" />
               </motion.div>
               <h1>灵感风暴 · 吃点什么</h1>
-              <p>打破选择僵局，精准狙击您的胃口痛点。从火锅到汉堡，从日料到沙拉，万物皆可盘。</p>
+              <p>打破选择僵局，解决终极难题。从汉堡披萨到日料沙拉，万物皆可盘。</p>
             </div>
             <div className="gender-row">
               <button className="gender-card male" onClick={() => handleGenderSelect('male')}>
@@ -220,8 +231,7 @@ const App: React.FC = () => {
           </motion.div>
         )}
 
-        {/* STEP 1: REGION SELECTION */}
-        {step === 1 && (
+        {step === 1 && ( /* same as before */
           <motion.div key="step1" className="step-container" initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }}>
              <button className="back-btn" onClick={() => setStep(0)}>
                <ChevronLeft size={20} /> 返回重置
@@ -229,7 +239,7 @@ const App: React.FC = () => {
              <div className="header-simple" style={{ marginTop: '2rem' }}>
                <MapPin size={50} color="#ffcc00" style={{ margin: '0 auto 1rem' }} />
                <h2>口味定调，由你定义</h2>
-               <p>饮食特征差异极大，请选择您最亲切的地域胃口定位，或者当前最想体验的风味：</p>
+               <p>请选择您最亲切的地域胃口定位，或者当前最想体验的风味：</p>
              </div>
              
              <div className="region-grid">
@@ -246,8 +256,7 @@ const App: React.FC = () => {
           </motion.div>
         )}
 
-        {/* STEP 2: AI SURVEY */}
-        {step === 2 && (
+        {step === 2 && ( /* same as before */
           <motion.div key="step2" className="step-container profiling-step" initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -100 }}>
             {isAILoading ? (
               <div className="loading-state">
@@ -256,18 +265,18 @@ const App: React.FC = () => {
                     <div className="circle two"></div>
                     <div className="circle three"></div>
                  </div>
-                <p>正在分析您的 <b>{profile.region}</b> 胃口特征，生成专属诊断问卷...</p>
+                <p>正在分析您的 <b>{profile.region}</b> 胃口特征，生成专属深度问卷...</p>
               </div>
-            ) : currentQuestion && (
+            ) : questions[currentQuestionIdx] && (
               <div className="question-card">
                 <div className="progress-bar">
                   <div className="progress-fill" style={{ width: `${((currentQuestionIdx+1)/questions.length)*100}%` }}></div>
                 </div>
                 <span className="q-badge">Decision Point {currentQuestionIdx+1}/{questions.length}</span>
-                <h2>{currentQuestion.title}</h2>
+                <h2>{questions[currentQuestionIdx].title}</h2>
                 <div className="options-grid">
-                  {currentQuestion.options.map(opt => (
-                    <button key={opt.id} onClick={() => handleAnswer(currentQuestion.id, opt.label)} className="option-btn">
+                  {questions[currentQuestionIdx].options.map(opt => (
+                    <button key={opt.id} onClick={() => handleAnswer(questions[currentQuestionIdx].id, opt.label)} className="option-btn">
                        <span className="label-text">{opt.label}</span>
                        <span className="desc-text">{opt.description}</span>
                     </button>
@@ -278,8 +287,7 @@ const App: React.FC = () => {
           </motion.div>
         )}
 
-        {/* STEP 3: ANALYZING */}
-        {step === 3 && (
+        {step === 3 && ( /* same as before */
           <motion.div key="step3" className="step-container">
             <div className="loading-fullscreen">
                <div className="brain-animation">
@@ -287,32 +295,51 @@ const App: React.FC = () => {
                   <div className="circle two"></div>
                   <div className="circle three"></div>
                </div>
-               <h2>AI 正在推算专属的美食雷达...</h2>
-               <p>性别: {profile.gender === 'male' ? '男生' : '女生'} | 画像: {profile.region}</p>
-               <p style={{ color: '#888', marginTop: '1rem', fontStyle: 'italic' }}>“汇聚地方爆款与西式快餐汉堡...”</p>
+               <h2>AI 正在推算专列老虎机...</h2>
+               <p style={{ color: '#888', marginTop: '1rem', fontStyle: 'italic' }}>“汇聚12个精准匹配美食爆点...”</p>
             </div>
           </motion.div>
         )}
 
-        {/* STEP 4: ROULETTE */}
+        {/* STEP 4: SLOT MACHINE (NEW) */}
         {step === 4 && (
-          <motion.div key="step4" className="step-container roulette-step" initial={{ scale: 0.8 }} animate={{ scale: 1 }}>
+          <motion.div key="step4" className="step-container slot-step" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
              <div className="header-simple">
-               <h2>命运轮盘已生成 (8 大选项)</h2>
-               <p>绝不单调，囊括中西快餐与街头爆款</p>
+               <h2>终极抉择机 (12 种可能)</h2>
+               <p>囊括中西快餐、特色地域菜系与灵魂小吃，一键定乾坤！</p>
              </div>
-             <div className="wheel-wrapper">
-                <div className="wheel-pointer"></div>
-                <div className="wheel" style={{ transform: `rotate(${rotation}deg)`, transition: isSpinning ? 'transform 4s cubic-bezier(0.15, 0, 0.15, 1)' : 'none' }}>
-                  {categories.map((cat, i) => (
-                    <div key={cat.id} className="wheel-section" style={{ transform: `rotate(${(360/categories.length) * i}deg)`, backgroundColor: cat.color, clipPath: 'polygon(50% 50%, 0 0, 100% 0)' }}>
-                      <span className="wheel-label">{cat.name}</span>
-                    </div>
-                  ))}
+             
+             <div className="slot-machine-wrapper">
+                <div className="slot-selector-arrow left"></div>
+                <div className="slot-window">
+                  <motion.div 
+                    className="slot-reel" 
+                    animate={controls}
+                    initial={{ y: 0 }}
+                  >
+                    {slotReelItems.map((cat, idx) => (
+                      <div 
+                        key={idx} 
+                        className="slot-item"
+                        style={{ backgroundColor: `${cat.color}20`, borderLeft: `8px solid ${cat.color}` }}
+                      >
+                        <span className="slot-item-name">{cat.name}</span>
+                        <span className="slot-item-desc">{cat.description?.substring(0, 15)}...</span>
+                      </div>
+                    ))}
+                  </motion.div>
                 </div>
-                <button className="wheel-center-btn" onClick={startSpin} disabled={isSpinning}>
-                  {isSpinning ? 'SPIN' : 'GO!'}
-                </button>
+                <div className="slot-selector-arrow right"></div>
+             </div>
+             
+             <div style={{ marginTop: '3rem', display: 'flex', justifyContent: 'center' }}>
+               <button className="spin-sloth-btn lg" onClick={startSpin} disabled={isSpinning}>
+                 {isSpinning ? (
+                   <><Loader2 className="animate-spin" size={24} style={{ marginRight: '8px' }}/> 疯狂滚动中...</>
+                 ) : (
+                   <><Zap size={24} style={{ marginRight: '8px' }}/> 摇动拉杆！(SPIN)</>
+                 )}
+               </button>
              </div>
           </motion.div>
         )}
@@ -325,7 +352,7 @@ const App: React.FC = () => {
                  <Award size={40} />
                </div>
                <div className="cat-info">
-                 <h2>今日上选：{selectedCat.name}</h2>
+                 <h2>命中大奖：{selectedCat.name}</h2>
                  <p>{selectedCat.description}</p>
                </div>
             </div>
@@ -355,8 +382,11 @@ const App: React.FC = () => {
             </div>
 
             <div className="result-actions">
-               <button className="retry-btn" onClick={() => setStep(4)}>
-                  <RefreshCw size={18} /> 命中不符？重拨轮盘
+               <button className="retry-btn" onClick={() => {
+                   controls.set({ y: 0 }); // reset the slot position immediately
+                   setStep(4);
+                 }}>
+                  <RefreshCw size={18} /> 命中不符？重拨老虎机
                </button>
                <button className="reset-btn" onClick={reset}>归零重构，更换主基调</button>
             </div>
